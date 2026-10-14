@@ -1,0 +1,9 @@
+[package]
+name = "dors"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nix = "0.31.3"
+pam = "0.7.0"
+rpassword = "7.5"
