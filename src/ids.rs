@@ -1,22 +1,25 @@
 use nix::libc::{self, getpwnam};
+use nix::unistd::{self, Gid, Uid, User};
 use std::process::exit;
 use std::os::unix::fs::MetadataExt;
-use std::ffi::{CString};
+use std::ffi::{CStr, CString};
 
-pub fn get_uid() -> u32 {
-    // This is only tested on a GNU/Linux system,
-    // so might not work elsewhere.
-    // taken from: https://stackoverflow.com/a/57952799
-    match std::fs::metadata("/proc/self").map(|m| m.uid()) {
-        Err(_) => {
-            println!("Could not determine uid.");
-            exit(1);
+pub fn get_username() -> Result<String, String> {
+    let uid = get_uid();
+    match User::from_uid(unistd::Uid::from(uid)) {
+        Ok(t) => match t {
+            Some(x) => Ok(x.name),
+            None => Err(String::from("Could not determine current user"))
         },
-        Ok(f) => f
+        Err(_) => Err(String::from("Could not determine current user"))
     }
 }
 
-pub fn get_uid_from_name(name: &str) -> (u32, u32) {
+pub fn get_uid() -> Uid {
+    unistd::getuid()
+}
+
+pub fn get_ids_from_name(name: &str) -> (u32, u32) {
     let s = CString::new(name).unwrap();
     let uid: u32;
     let gid: u32;
@@ -37,10 +40,9 @@ pub fn get_euid() -> u32 {
 }
 
 pub fn set_ids(username: &String) {
-    let (uid, gid) = get_uid_from_name(&username);
+    let (uid, gid) = get_ids_from_name(&username);
     unsafe {
         libc::setresgid(gid, gid, gid);
         libc::setresuid(uid, uid, uid);
     }
 }
-

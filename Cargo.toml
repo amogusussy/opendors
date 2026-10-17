@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-nix = "0.31.3"
+nix = {version = "0.31.3", features = ["user"]}
 pam = "0.7.0"
 rpassword = "7.5"
+serde = "0.8.7"
+toml = "1.1.8+spec-1.1.0"
+
+[profile.release]
+debug = true

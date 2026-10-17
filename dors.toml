@@ -1,0 +1,30 @@
+[wheel]
+is_group = true
+permitted_as = [
+  "*", 
+  "root" 
+]
+pass = true
+log = false
+persist = true
+persist_len = 60 # persist for 60 seconds
+keep_env = [
+ "DISPLAY",
+ "TERM"
+]
+
+[matthew]
+is_group = false
+permitted_as = [ "*" ]
+non_permitted_as = [ ]
+pass = true
+log = false
+persist = true
+persist_len = 60 # persist for 60 seconds
+keep_env = [
+ "DISPLAY",
+ "TERM"
+]
+custom_env = [
+ { name = "EDITOR", value = "nvim" }
+]

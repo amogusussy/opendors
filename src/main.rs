@@ -1,10 +1,15 @@
 use std::cmp::Ordering;
-use std::process::exit;
-use std::env;
+use std::process::{Command, exit};
+use std::{env, os};
+
+use crate::config::EnvPair;
 
 mod auth;
 mod ids;
+mod config;
+mod permissions;
 
+#[derive(Debug)]
 struct Arguments {
     config: String, // path to config file
     interactive: bool, // show a password prompt?
@@ -36,7 +41,7 @@ fn strip_arg(arg: &str) -> Result<char, String> {
 }
 
 fn read_arguments(args: &Vec<String>) -> Result<Arguments, ()> {
-    let mut config_file = String::from("/etc/dors.conf");
+    let mut config_file = String::from("/etc/dors.toml");
     let mut interactive: bool = true;
     let mut user: String = String::from("root");
 
@@ -98,11 +103,19 @@ fn exec_string_vec(command: Vec<String>) -> Result<std::process::Command, ()> {
     }
 }
 
-fn debug_args(args: &Arguments) {
-    println!("Config: {}", args.config);
-    println!("Interactive: {}", args.interactive);
-    println!("User: {}", args.user);
-    println!("Command: {}", args.command.join(" "));
+fn get_envvars(perms: &permissions::Permissions) -> Vec<EnvPair> {
+    let mut vars = perms.custom_env.clone();
+    for key in &perms.keep_env {
+        let val = match std::env::var(key) {
+            Ok(val) => val,
+            Err(_) => continue
+        };
+        vars.push(EnvPair {
+            name: key.into(),
+            value: val
+        })
+    }
+    vars
 }
 
 
@@ -115,33 +128,65 @@ fn main() {
             exit(1)
         }
     };
-    debug_args(&args);
+    //debug_args(&args);
+    let config_opts = match config::read_config(&args.config) {
+        Ok(opts) => opts,
+        Err(e) => {
+            println!("{}", e);
+            exit(1);
+        }
+    };
+
+    let perms = match permissions::get_most_relevant_config(&config_opts) {
+        Ok(p) => p,
+        Err(_) => {
+            println!("Could not determine permissions");
+            exit(1);
+        }
+    };
+    if !permissions::can_be_user(&args.user, &perms) {
+        println!("You don't have permissions to be this user. Check {} for more info", args.config);
+        exit(1);
+    }
 
     let path = match env::var("PATH") {
         Ok(path) => path,
         Err(_) => String::from("/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin")
     };
 
-    let password = auth::get_password();
-    println!("{}", password);
-    match auth::verify_pass(&args.user, &password) {
-        Err(_) => {
-            println!("Password incorrect.");
-            exit(1);
-        },
-        Ok(f) => f
-    };
-
     ids::set_ids(&args.user);
+    if perms.pass { 
+        let password = auth::get_password();
+        match auth::verify_pass(&args.user, &password) {
+            Err(e) => {
+                println!("Password incorrect. {}", e);
+                exit(1);
+            },
+            Ok(f) => {
+                f
+            }
+        };
+    }
+
+    if !args.interactive && perms.pass {
+        println!("You must enter a password. Non-interactive mode wont work.");
+        exit(1);
+    }
 
     args.command.reverse();
+
+    let envvars = get_envvars(&perms);
     let spawned = match exec_string_vec(args.command) {
         Ok(f) => f,
         Err(_) => {
             println!("Couldn't format the command");
             exit(1);
         }
-    }.env("PATH", path).spawn();
+    }
+    .env_clear()
+    .env("PATH", path)
+    .envs(envvars.iter().map(|e| (&e.name, &e.value)))
+    .spawn();
 
     let mut cmd = match spawned {
         Ok(t) => t,
