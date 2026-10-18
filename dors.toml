@@ -16,7 +16,6 @@ keep_env = [
 [matthew]
 is_group = false
 permitted_as = [ "*" ]
-non_permitted_as = [ ]
 pass = true
 log = false
 persist = true
