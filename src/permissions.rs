@@ -1,5 +1,4 @@
 use crate::config::{Entry, EnvPair};
-use nix::unistd;
 use nix::unistd::{getuid, User, getgrouplist, Group};
 use std::ffi::CString;
 use crate::ids;

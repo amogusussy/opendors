@@ -154,10 +154,17 @@ fn main() {
         Err(_) => String::from("/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin")
     };
 
+    let cur_user = match auth::get_current_username() {
+        Ok(user) => user,
+        Err(_) => {
+            println!("Could not get current user.");
+            exit(1);
+        }
+    };
     ids::set_ids(&args.user);
     if perms.pass { 
-        let password = auth::get_password();
-        match auth::verify_pass(&args.user, &password) {
+        let password = auth::get_password(&format!("[dors] Enter the password for {}: ", cur_user));
+        match auth::verify_pass(&cur_user, &password) {
             Err(e) => {
                 println!("Password incorrect. {}", e);
                 exit(1);
