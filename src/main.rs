@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 use std::process::{Command, exit};
 use std::{env, os};
 
+use nix::libc::getenv;
+
 use crate::config::EnvPair;
 
 mod auth;
@@ -13,18 +15,20 @@ mod permissions;
 struct Arguments {
     config: String, // path to config file
     interactive: bool, // show a password prompt?
+    shell: bool, // Whether to replace the command with $SHELL
     user: String, // default root.
-    command: Vec<String> // The command to be executed
+    command: Vec<String>, // The command to be executed
 }
 
 fn usage(verbose: bool, code: i32) {
     if verbose {
-        println!("usage: dors [-Lns] [-C config] [-u user]");
+        println!("usage: dors [-nus] [-C config] [-u user] [command]");
         println!("-C config -- The config file");
         println!("-n -- Non-interactive mode. Will fail if password required");
         println!("-u -- The user. Default is root");
+        println!("-s -- Replace the command with $SHELL");
     } else {
-        println!("usage: dors [-n] [-C config] [-u user]");
+        println!("usage: dors [-nus] [-C config] [-u user] [command]");
     }
     exit(code);
 }
@@ -44,6 +48,7 @@ fn read_arguments(args: &Vec<String>) -> Result<Arguments, ()> {
     let mut config_file = String::from("/etc/dors.toml");
     let mut interactive: bool = true;
     let mut user: String = String::from("root");
+    let mut shell: bool = false;
 
     let mut current_arg_count: usize = 1; // skip binary
     'arg_loop: while current_arg_count < args.len() {
@@ -70,6 +75,9 @@ fn read_arguments(args: &Vec<String>) -> Result<Arguments, ()> {
             Ok('n') => {
                 interactive = false;
             },
+            Ok('s') => {
+                shell = true;
+            },
             Ok(_) => {
                 usage(false, 1);
             }
@@ -81,6 +89,7 @@ fn read_arguments(args: &Vec<String>) -> Result<Arguments, ()> {
     Ok(Arguments {
         config: config_file,
         interactive: interactive,
+        shell: shell,
         user: user,
         command: command,
     })
@@ -163,7 +172,7 @@ fn main() {
     };
     ids::set_ids(&args.user);
     if perms.pass { 
-        let password = auth::get_password(&format!("[dors] Enter the password for {}: ", cur_user));
+        let password = auth::get_password(&format!("[dors] Password for {}: ", cur_user));
         match auth::verify_pass(&cur_user, &password) {
             Err(e) => {
                 println!("Password incorrect. {}", e);
@@ -179,6 +188,15 @@ fn main() {
         println!("You must enter a password. Non-interactive mode wont work.");
         exit(1);
     }
+
+    if args.shell {
+        let shell = match auth::get_shell() {
+            Ok(shell) => shell,
+            Err(_) => env::var("SHELL").unwrap()
+        };
+        args.command = vec![shell];
+    }
+
 
     args.command.reverse();
 
