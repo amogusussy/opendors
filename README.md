@@ -1,14 +1,15 @@
 # OpenDors
 A sudo/opendoas clone written in rust.
 
-![Make me a sandwich](./static/sandwich.png)
+<img src="./static/sandwich.png" alt="Make me a sandwich" width="400"/>
 
 ## Usage
 ```bash
-usage: dors [-n] [-C config] [-u user] [command]
+usage: dors [-nus] [-C config] [-u user] [command]
     -C config -- The config file
     -n -- Non-interactive mode. Will fail if password required
-    -u user -- The user. Default is root
+    -u -- The user. Default is root
+    -s -- Replace the command with $SHELL
 ```
 
 User permissions are determined via the `/etc/dors.toml` file. Each entry should look something like this:
