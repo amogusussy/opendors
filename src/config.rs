@@ -1,9 +1,7 @@
 use std::fs::{File, metadata};
 use std::io::Read;
-use nix::unistd;
 use std::os::linux::fs::MetadataExt;
 use toml::{self, Table, Value};
-use crate::ids;
 
 #[derive(Debug, Clone)]
 pub struct EnvPair {
@@ -22,11 +20,6 @@ pub struct Entry {
     pub persist_len: u32,
     pub keep_env: Vec<String>,
     pub custom_env: Vec<EnvPair>
-}
-
-pub struct Config {
-    entries: Vec<Entry>,
-    path: String,
 }
 
 fn get_owner(file_path: &str) -> Result<u32, &str> {
@@ -61,19 +54,18 @@ fn get_string_array(value: Option<&Value>) -> Vec<String> {
 
 fn read_entry(name: &str, entry: &Value) -> Entry {
     let permitted_as = get_string_array(entry.get("permitted_as"));
-    let not_permitted_as = get_string_array(entry.get("not_permitted_as"));
     let keep_env = get_string_array(entry.get("keep_env"));
 
-    let log = entry.get("log").and_then(Value::as_bool).unwrap_or(false);
+    let log = entry.get("log").and_then(Value::as_bool).unwrap_or(true);
+    // always log if not told not to.
     let is_group = entry.get("is_group").and_then(Value::as_bool).unwrap_or(false);
     let pass = entry.get("pass").and_then(Value::as_bool).unwrap_or(false);
     let persist = entry.get("persist").and_then(Value::as_bool).unwrap_or(false);
 
-    let persist_len = match entry.get("persist").and_then(Value::as_integer) {
-        Some(n) => {
-            if persist { n as u32 } else { 0 }
-        },
-        _ => 0
+    let persist_len = if let Some(n) = entry.get("persist_len").and_then(Value::as_integer) {
+        if persist { n as u32 } else { 0 }
+    } else {
+        0
     };
 
     let custom_env: Vec<EnvPair> = match entry

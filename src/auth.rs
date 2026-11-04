@@ -1,9 +1,12 @@
 use users::{get_user_by_uid, get_current_uid };
 use users::os::unix::UserExt;
-use std::path::Path;
 use pam::{Authenticator, PamError};
 use rpassword;
 
+
+pub enum AuthErrors {
+    CouldNotGetPassword,
+}
 
 pub fn get_current_username() -> Result<String, String> {
     let user = get_user_by_uid(get_current_uid()).unwrap();
@@ -24,8 +27,13 @@ pub fn get_shell() -> Result<String, String> {
     Ok(String::from(shell_path))
 }
 
-pub fn get_password(prompt: &str) -> String {
-    rpassword::prompt_password(prompt).unwrap()
+pub fn get_password(prompt: &str) -> Result<String, AuthErrors> {
+    match rpassword::prompt_password(prompt) {
+        Ok(pw) => Ok(pw),
+        Err(_) => {
+            Err(AuthErrors::CouldNotGetPassword)
+        }
+    }
 }
 
 pub fn verify_pass(username: &String, password: &String) -> Result<(), PamError> {

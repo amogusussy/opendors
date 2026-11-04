@@ -3,6 +3,8 @@ use nix::unistd::{getuid, User, getgrouplist, Group};
 use std::ffi::CString;
 use crate::ids;
 
+// TODO: Add errors enum
+
 #[derive(Debug)]
 pub struct Permissions {
     pub permitted_as: Vec<String>,
@@ -54,7 +56,10 @@ pub fn get_most_relevant_config(config: &Vec<Entry>) -> Result<Permissions, Stri
     if config.len() == 0 {
         return Err(String::from("No config options"))
     }
-    let username = ids::get_username()?;
+    let username = match ids::get_username() {
+        Ok(u) => u,
+        Err(_) => return Err(String::from("Could not get username"))
+    };
     let groups = match current_user_groups() {
         Ok(g) => g,
         Err(_) => return Err(String::from("You're in no groups :("))

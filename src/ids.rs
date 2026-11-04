@@ -1,17 +1,21 @@
 use nix::libc::{self, getpwnam};
-use nix::unistd::{self, Gid, Uid, User};
-use std::process::exit;
-use std::os::unix::fs::MetadataExt;
-use std::ffi::{CStr, CString};
+use nix::unistd::{self, Uid, User};
+use std::ffi::CString;
 
-pub fn get_username() -> Result<String, String> {
+pub enum IdError {
+    NotDetermineCurUser,
+    NotSetIds,
+    NotGetIds
+}
+
+pub fn get_username() -> Result<String, IdError> {
     let uid = get_uid();
     match User::from_uid(unistd::Uid::from(uid)) {
         Ok(t) => match t {
             Some(x) => Ok(x.name),
-            None => Err(String::from("Could not determine current user"))
+            None => Err(IdError::NotDetermineCurUser)
         },
-        Err(_) => Err(String::from("Could not determine current user"))
+        Err(_) => Err(IdError::NotDetermineCurUser)
     }
 }
 
@@ -19,30 +23,33 @@ pub fn get_uid() -> Uid {
     unistd::getuid()
 }
 
-pub fn get_ids_from_name(name: &str) -> (u32, u32) {
+pub fn get_ids_from_name(name: &str) -> Result<(u32, u32), IdError> {
     let s = CString::new(name).unwrap();
     let uid: u32;
     let gid: u32;
     unsafe {
         let p = getpwnam(s.as_ptr());
         if p == std::ptr::null_mut() {
-            println!("Error: User {} doesn't exist", name);
-            exit(1);
+            return Err(IdError::NotGetIds);
         }
         uid = (*p).pw_uid;
         gid = (*p).pw_gid;
     };
-    (uid, gid)
+    Ok((uid, gid))
 }
 
-pub fn get_euid() -> u32 {
-    unsafe { libc::geteuid() }
-}
-
-pub fn set_ids(username: &String) {
-    let (uid, gid) = get_ids_from_name(&username);
+pub fn set_ids(username: &String) -> Result<(i32, i32), IdError> {
+    let (uid, gid) = get_ids_from_name(&username)?;
+    let r1;
+    let r2;
     unsafe {
-        libc::setresgid(gid, gid, gid);
-        libc::setresuid(uid, uid, uid);
+        r1 = libc::setresgid(gid, gid, gid);
+        r2 = libc::setresuid(uid, uid, uid);
+    };
+
+    if (r1 != 0) || (r2 != 0) {
+        Err(IdError::NotSetIds)
+    } else {
+        Ok((r1, r2))
     }
 }

@@ -1,8 +1,7 @@
 use std::cmp::Ordering;
-use std::process::{Command, exit};
-use std::{env, os};
-
-use nix::libc::getenv;
+use users::get_current_uid;
+use std::process::exit;
+use std::env;
 
 use crate::config::EnvPair;
 
@@ -10,6 +9,7 @@ mod auth;
 mod ids;
 mod config;
 mod permissions;
+mod timestamp;
 
 #[derive(Debug)]
 struct Arguments {
@@ -137,6 +137,7 @@ fn main() {
             exit(1)
         }
     };
+    let calling_uid = get_current_uid();
     //debug_args(&args);
     let config_opts = match config::read_config(&args.config) {
         Ok(opts) => opts,
@@ -163,6 +164,16 @@ fn main() {
         Err(_) => String::from("/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin")
     };
 
+    let valid_timestamp = match timestamp::TimeStampCookie::from_user(calling_uid) {
+        Ok(ts) => {
+            // persist enabled and within time window.
+            perms.persist && (ts.ts + (perms.persist_len as u64) >= timestamp::get_now().unwrap())
+        },
+        Err(_) => {
+            false
+        }
+    };
+
     let cur_user = match auth::get_current_username() {
         Ok(user) => user,
         Err(_) => {
@@ -170,9 +181,22 @@ fn main() {
             exit(1);
         }
     };
-    ids::set_ids(&args.user);
-    if perms.pass { 
-        let password = auth::get_password(&format!("[dors] Password for {}: ", cur_user));
+
+    match ids::set_ids(&args.user) {
+        Ok(_) => {},
+        Err(_) => {
+            println!("Failed to set user ids.");
+            exit(1);
+        }
+    };
+    if perms.pass && !valid_timestamp {
+        let password = match auth::get_password(&format!("[dors] Password for {}: ", cur_user)) {
+            Ok(pw) => pw,
+            Err(_) => {
+                println!("Failed to read password");
+                exit(1);
+            }
+        };
         match auth::verify_pass(&cur_user, &password) {
             Err(e) => {
                 println!("Password incorrect. {}", e);
@@ -182,7 +206,7 @@ fn main() {
                 f
             }
         };
-    }
+    };
 
     if !args.interactive && perms.pass {
         println!("You must enter a password. Non-interactive mode wont work.");
@@ -192,11 +216,11 @@ fn main() {
     if args.shell {
         let shell = match auth::get_shell() {
             Ok(shell) => shell,
-            Err(_) => env::var("SHELL").unwrap()
+            // hope sh is installed. if not, you have bigger problems.
+            Err(_) => env::var("SHELL").unwrap_or(String::from("/bin/sh"))
         };
         args.command = vec![shell];
     }
-
 
     args.command.reverse();
 
@@ -212,6 +236,19 @@ fn main() {
     .env("PATH", path)
     .envs(envvars.iter().map(|e| (&e.name, &e.value)))
     .spawn();
+
+    if perms.persist {
+        if let Ok(now) = timestamp::TimeStampCookie::new(calling_uid) {
+            match now.write() {
+                Err(_) => {
+                    exit(1);
+                },
+                Ok(_) => {}
+            };
+        } else {
+            println!("Could not create timestamp");
+        }
+    }
 
     let mut cmd = match spawned {
         Ok(t) => t,
