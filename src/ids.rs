@@ -2,6 +2,7 @@ use nix::libc::{self, getpwnam};
 use nix::unistd::{self, Uid, User};
 use std::ffi::CString;
 
+#[derive(Debug)]
 pub enum IdError {
     NotDetermineCurUser,
     NotSetIds,
@@ -48,6 +49,7 @@ pub fn set_ids(username: &String) -> Result<(i32, i32), IdError> {
     };
 
     if (r1 != 0) || (r2 != 0) {
+        println!("{}, {}, g: {}, u: {}", r1, r2, gid, uid);
         Err(IdError::NotSetIds)
     } else {
         Ok((r1, r2))

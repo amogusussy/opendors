@@ -20,7 +20,7 @@ struct Arguments {
     command: Vec<String>, // The command to be executed
 }
 
-fn usage(verbose: bool, code: i32) {
+fn usage(verbose: bool, code: i32) -> ! {
     if verbose {
         println!("usage: dors [-nus] [-C config] [-u user] [command]");
         println!("-C config -- The config file");
@@ -134,9 +134,12 @@ fn main() {
         Ok(x) => x,
         Err(_) => {
             usage(false, 1);
-            exit(1)
         }
     };
+    if args.command.len() == 0 && !args.shell {
+        usage(true, 1);
+    }
+
     let calling_uid = get_current_uid();
     //debug_args(&args);
     let config_opts = match config::read_config(&args.config) {
@@ -184,7 +187,8 @@ fn main() {
 
     match ids::set_ids(&args.user) {
         Ok(_) => {},
-        Err(_) => {
+        Err(e) => {
+            dbg!(e);
             println!("Failed to set user ids.");
             exit(1);
         }
@@ -252,10 +256,8 @@ fn main() {
 
     let mut cmd = match spawned {
         Ok(t) => t,
-        Err(e) => {
+        Err(_) => {
             usage(false, 1);
-            println!("{}", e);
-            exit(1)
         }
     };
 
