@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use users::get_current_uid;
 use std::process::exit;
 use std::env;
@@ -95,22 +94,6 @@ fn read_arguments(args: &Vec<String>) -> Result<Arguments, ()> {
     })
 }
 
-
-fn exec_string_vec(command: Vec<String>) -> Result<std::process::Command, ()> {
-    match command.len().cmp(&(1 as usize)) {
-        Ordering::Less => {
-            println!("Insuffiecient arguments");
-            exit(1);
-        },
-        Ordering::Equal => {
-            Ok(std::process::Command::new(&command[0]))
-        },
-        Ordering::Greater => {
-            exec_string_vec(command[1..].to_vec())
-        }
-
-    }
-}
 
 fn get_envvars(perms: &permissions::Permissions) -> Vec<EnvPair> {
     let mut vars = perms.custom_env.clone();
@@ -226,20 +209,13 @@ fn main() {
         args.command = vec![shell];
     }
 
-    args.command.reverse();
-
     let envvars = get_envvars(&perms);
-    let spawned = match exec_string_vec(args.command) {
-        Ok(f) => f,
-        Err(_) => {
-            println!("Couldn't format the command");
-            exit(1);
-        }
-    }
-    .env_clear()
-    .env("PATH", path)
-    .envs(envvars.iter().map(|e| (&e.name, &e.value)))
-    .spawn();
+    let spawned = std::process::Command::new(&args.command[0])
+        .args(&args.command[1..].to_vec())
+        .env_clear()
+        .env("PATH", path)
+        .envs(envvars.iter().map(|e| (&e.name, &e.value)))
+        .spawn();
 
     if perms.persist {
         if let Ok(now) = timestamp::TimeStampCookie::new(calling_uid) {
